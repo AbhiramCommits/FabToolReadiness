@@ -15,10 +15,15 @@ technician training coverage per fab tool, to flag tools at risk of downtime.
 cp .env.example .env          # set a real password
 make reset                    # db up -> schema -> lookups -> synthetic data
 make analytics                # create the analytics views (see sql/analytics/)
+make export                   # Tableau CSVs + Excel tracker -> exports/
 ```
 
 `make reset` builds the database from scratch and prints row counts per table at the end.
 `make refresh` re-populates the materialized views in dependency order.
+`python scripts/export_reports.py --site ALL --as-of YYYY-MM-DD --out exports/`
+writes flat Tableau CSVs (`exports/tableau/`) and the formatted Excel tracker
+(`exports/FabToolReadiness_Tracker.xlsx`) with KPI charts, a reorder tracker,
+a training tracker, an at-risk tool list, and a data dictionary.
 
 ## Analytics views
 

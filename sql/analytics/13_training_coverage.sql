@@ -35,8 +35,8 @@ certified AS (
         te.shift,
         COUNT(DISTINCT tc.tech_id) AS certified_techs,
         COUNT(*) FILTER (
-            WHERE tc.expires_date BETWEEN CURRENT_DATE
-                                     AND CURRENT_DATE + INTERVAL '90 days'
+            WHERE tc.expires_date BETWEEN analytics_as_of()
+                                     AND analytics_as_of() + INTERVAL '90 days'
         ) AS certs_expiring_90d
     FROM tech_certifications tc
     JOIN technicians te ON te.tech_id = tc.tech_id

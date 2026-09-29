@@ -29,7 +29,7 @@ WITH enrolled AS (
         COUNT(*) AS enrolled_count,
         COUNT(*) FILTER (WHERE tc.completed_date IS NOT NULL) AS completed_count,
         COUNT(*) FILTER (WHERE tc.completed_date IS NULL
-                          AND tc.enrolled_date < CURRENT_DATE - INTERVAL '120 days')
+                          AND tc.enrolled_date < analytics_as_of() - INTERVAL '120 days')
             AS stale_in_progress_count
     FROM training_completions tc
     JOIN technicians t ON t.tech_id = tc.tech_id

@@ -37,7 +37,7 @@ WITH usage_180d AS (
         MAX(movement_date) AS last_consumption_date
     FROM stock_movements
     WHERE movement_type = 'consumption'
-      AND movement_date >= CURRENT_DATE - INTERVAL '180 days'
+      AND movement_date >= analytics_as_of() - INTERVAL '180 days'
     GROUP BY site_id, part_id
 ),
 latest_usage AS (
