@@ -23,6 +23,7 @@ N_MONTHS = 24
 N_TOOLS = 250
 N_TECHS = 600
 STOCKOUT_FRACTION = 0.08
+OBSOLETE_FRACTION = 0.03
 NEAR_EXPIRY_FRACTION = 0.09
 IN_PROGRESS_FRACTION = 0.08
 
@@ -166,6 +167,9 @@ def generate_inventory_and_movements(sites: pd.DataFrame, parts: pd.DataFrame,
     random.shuffle(pairs)
     n_stockout = round(len(pairs) * STOCKOUT_FRACTION)
     stockout_pairs = set(random.sample(pairs, n_stockout))
+    n_obsolete = round(len(pairs) * OBSOLETE_FRACTION)
+    obsolete_pairs = set(random.sample(
+        [p for p in pairs if p not in stockout_pairs], n_obsolete))
 
     month_starts = []
     ms = month_start(TODAY)
@@ -187,7 +191,14 @@ def generate_inventory_and_movements(sites: pd.DataFrame, parts: pd.DataFrame,
         safety = max(1, round(lam * lead_months * 0.6))
         reorder = safety * 2
         is_stockout = (site_id, part_id) in stockout_pairs
-        if is_stockout:
+        is_obsolete = (site_id, part_id) in obsolete_pairs
+        if is_obsolete:
+            # Stock that stops moving: healthy initial stock, then consumption
+            # freezes so the bin becomes obsolete (excess) inventory.
+            on_hand = round(reorder * random.uniform(2.0, 3.5))
+            freeze_after = random.randint(14, 17)
+            window_start = window_end = None
+        elif is_stockout:
             on_hand = round(reorder * random.uniform(0.1, 0.4))
             window_start = random.randint(4, 14)
             window_end = min(window_start + random.randint(4, 8), N_MONTHS - 2)
@@ -199,7 +210,9 @@ def generate_inventory_and_movements(sites: pd.DataFrame, parts: pd.DataFrame,
         hit_zero = False
 
         for m, ms_date in enumerate(month_starts):
-            # 1) receipts due this month
+            frozen = is_obsolete and m >= freeze_after
+
+            # 1) receipts due this month (ordered before the freeze still land)
             if pending_arrival is not None and pending_arrival[0] == m:
                 on_hand += pending_arrival[1]
                 movement_rows.append({
@@ -209,6 +222,9 @@ def generate_inventory_and_movements(sites: pd.DataFrame, parts: pd.DataFrame,
                 })
                 movement_id += 1
                 pending_arrival = None
+
+            if frozen:
+                continue
 
             # 2) consumption (seasonal demand, split into several movements)
             in_window = is_stockout and window_start <= m < window_end
@@ -295,6 +311,7 @@ def generate_inventory_and_movements(sites: pd.DataFrame, parts: pd.DataFrame,
         "n_stockout_pairs": n_stockout,
         "stockout_pairs_hit_zero": total_stockout_pairs_hit,
         "stockout_months": stockout_month_count,
+        "n_obsolete_pairs": n_obsolete,
     }
 
 
@@ -485,7 +502,8 @@ def main():
           + ", ".join(f"{k}={v}" for k, v in shift_counts.items()) + ")")
     print(f"Stockouts: {stockout_stats['n_stockout_pairs']} part/site pairs flagged, "
           f"{stockout_stats['stockout_pairs_hit_zero']} actually hit zero, "
-          f"{stockout_stats['stockout_months']} stockout pair-months")
+          f"{stockout_stats['stockout_months']} stockout pair-months; "
+          f"{stockout_stats['n_obsolete_pairs']} obsolete part/site pairs frozen")
     print(f"Tech certifications: {len(tech_certs)} "
           f"({(tech_certs['status'] == 'active').sum()} active, "
           f"{(tech_certs['status'] == 'expired').sum()} expired, "
