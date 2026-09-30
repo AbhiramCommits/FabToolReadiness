@@ -100,8 +100,8 @@ Three headline findings from the seeded dataset (full readout:
 Build and publish the dashboard with
 [docs/TABLEAU_GUIDE.md](docs/TABLEAU_GUIDE.md).
 
-**Tableau Public dashboard:**
-<!-- TODO: paste published URL -->
+**Tableau dashboard:**
+[Fab Tool Readiness](https://10ay.online.tableau.com/#/site/skasired649-bcfa170192/workbooks/4744145/views)
 
 ## Testing & validation
 
