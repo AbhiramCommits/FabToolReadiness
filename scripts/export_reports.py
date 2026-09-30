@@ -25,7 +25,7 @@ import sys
 from pathlib import Path
 
 import pandas as pd
-from sqlalchemy import create_engine, text
+from sqlalchemy import Connection, Engine, create_engine, text
 
 log = logging.getLogger("export_reports")
 
@@ -42,7 +42,8 @@ WORKBOOK = "FabToolReadiness_Tracker.xlsx"
 # Database plumbing
 # ---------------------------------------------------------------------------
 
-def load_env() -> dict:
+def load_env() -> dict[str, str]:
+    """Read KEY=VALUE pairs from the repo .env file (no python-dotenv dep)."""
     env = {}
     env_path = Path(__file__).resolve().parent.parent / ".env"
     if env_path.exists():
@@ -55,7 +56,13 @@ def load_env() -> dict:
     return env
 
 
-def connect():
+def connect() -> Engine:
+    """Build an engine for the fabtool database.
+
+    Connection settings come from FABTOOL_DB_* / POSTGRES_PASSWORD env vars,
+    falling back to the .env file. FABTOOL_DB_SCHEMA, when set, scopes the
+    session to that schema (used by the test suite).
+    """
     env = load_env()
 
     def val(key, default):
@@ -78,7 +85,7 @@ def connect():
 # Data gathering (runs inside a rolled-back transaction with fabtool.as_of set)
 # ---------------------------------------------------------------------------
 
-def resolve_site(conn, site_arg):
+def resolve_site(conn: Connection, site_arg: str) -> int | None:
     """Return site_id for --site (None = ALL), or exit with an error."""
     code = site_arg.strip().upper()
     if code == "ALL":
@@ -95,15 +102,19 @@ def resolve_site(conn, site_arg):
     return int(row.iloc[0]["site_id"])
 
 
-def where(al):
+def where(al: str) -> str:
+    """WHERE clause restricting to SITE_ID for the given table alias."""
     return f"WHERE {al}.site_id = {SITE_ID}" if SITE_ID else ""
 
 
-def and_where(al):
+def and_where(al: str) -> str:
+    """AND clause restricting to SITE_ID for the given table alias."""
     return f"AND {al}.site_id = {SITE_ID}" if SITE_ID else ""
 
 
-def gather(conn, as_of, site_id):
+def gather(conn: Connection, as_of: dt.date, site_id: int | None
+           ) -> dict[str, pd.DataFrame | pd.Series | float]:
+    """Run every export query and return the frames/series in one dict."""
     global SITE_ID
     SITE_ID = site_id
     asof = as_of.isoformat()
@@ -295,7 +306,8 @@ def gather(conn, as_of, site_id):
 # Tableau CSVs
 # ---------------------------------------------------------------------------
 
-def write_csvs(out_dir, data):
+def write_csvs(out_dir: Path, data: dict) -> None:
+    """Write the five flat Tableau CSVs and log their row counts."""
     tableau_dir = out_dir / "tableau"
     tableau_dir.mkdir(parents=True, exist_ok=True)
     for name in TABLEAU_CSVS:
@@ -308,7 +320,9 @@ def write_csvs(out_dir, data):
 # Excel workbook
 # ---------------------------------------------------------------------------
 
-def write_workbook(out_dir, data, as_of, scope_label):
+def write_workbook(out_dir: Path, data: dict, as_of: dt.date,
+                   scope_label: str) -> None:
+    """Write the formatted Excel tracker with KPIs, charts and trackers."""
     out_dir.mkdir(parents=True, exist_ok=True)
     path = out_dir / WORKBOOK
     sheet_rows = {}
@@ -611,7 +625,8 @@ DATA_DICTIONARY = [
 # Main
 # ---------------------------------------------------------------------------
 
-def main(argv=None):
+def main(argv: list[str] | None = None) -> None:
+    """CLI entry point: parse flags, gather data, write CSVs + workbook."""
     parser = argparse.ArgumentParser(
         description="Export Tableau CSVs and the Excel tracker.")
     parser.add_argument("--site", default="ALL",

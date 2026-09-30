@@ -15,7 +15,7 @@ from pathlib import Path
 
 import pandas as pd
 from faker import Faker
-from sqlalchemy import create_engine, text
+from sqlalchemy import Engine, create_engine, text
 
 SEED = 42
 TODAY = dt.date.today()
@@ -27,7 +27,8 @@ OBSOLETE_FRACTION = 0.03
 NEAR_EXPIRY_FRACTION = 0.09
 IN_PROGRESS_FRACTION = 0.08
 
-TOOL_TYPES = ["ETCH", "LITHO", "CVD", "PVD", "CMP", "DIFF", "IMPLANT", "METRO", "WETS", "AMHS"]
+TOOL_TYPES = ["ETCH", "LITHO", "CVD", "PVD", "CMP",
+              "DIFF", "IMPLANT", "METRO", "WETS", "AMHS"]
 TYPE_WEIGHTS = [0.14, 0.10, 0.13, 0.09, 0.10, 0.08, 0.07, 0.09, 0.09, 0.11]
 PROCESS_AREA = {
     "ETCH": "Dry Etch Bay",
@@ -55,7 +56,8 @@ fake = Faker()
 # Helpers
 # ---------------------------------------------------------------------------
 
-def load_env() -> dict:
+def load_env() -> dict[str, str]:
+    """Read KEY=VALUE pairs from the repo .env file (no python-dotenv dep)."""
     env = {}
     env_path = Path(__file__).resolve().parent.parent / ".env"
     if env_path.exists():
@@ -68,7 +70,8 @@ def load_env() -> dict:
     return env
 
 
-def connect():
+def connect() -> Engine:
+    """Build a SQLAlchemy engine for the fabtool database."""
     env = load_env()
     params = {
         "host": os.environ.get("FABTOOL_DB_HOST", "localhost"),
@@ -111,6 +114,7 @@ def day_in_month(ms: dt.date) -> dt.date:
 # ---------------------------------------------------------------------------
 
 def generate_tools(sites: pd.DataFrame) -> pd.DataFrame:
+    """Generate ~250 tools spread across the given sites."""
     rows = []
     tool_id = 1
     per_site = {site_id: N_TOOLS // len(sites) + (1 if i < N_TOOLS % len(sites) else 0)
@@ -135,6 +139,7 @@ def generate_tools(sites: pd.DataFrame) -> pd.DataFrame:
 
 
 def generate_bom(tools: pd.DataFrame, parts: pd.DataFrame) -> pd.DataFrame:
+    """Build a bill of materials of 5-15 parts per tool."""
     consumable_ids = set(parts.loc[parts["is_consumable"], "part_id"])
     rows = []
     for _, tool in tools.iterrows():
@@ -156,8 +161,14 @@ def generate_bom(tools: pd.DataFrame, parts: pd.DataFrame) -> pd.DataFrame:
 # Inventory + stock movements
 # ---------------------------------------------------------------------------
 
-def generate_inventory_and_movements(sites: pd.DataFrame, parts: pd.DataFrame,
-                                     tools: pd.DataFrame):
+def generate_inventory_and_movements(
+        sites: pd.DataFrame, parts: pd.DataFrame, tools: pd.DataFrame
+) -> tuple[pd.DataFrame, pd.DataFrame, dict[str, int]]:
+    """Simulate 24 months of consumption/receipts per part/site pair.
+
+    Deliberately creates stockouts on ~8% of pairs and freezes ~3% of pairs
+    into obsolete (excess) stock. Returns (inventory, movements, stats).
+    """
     tools_by_site = {
         int(site_id): tools.loc[tools["site_id"] == site_id, "tool_id"].tolist()
         for site_id in sites["site_id"]
@@ -320,13 +331,21 @@ def generate_inventory_and_movements(sites: pd.DataFrame, parts: pd.DataFrame,
 # ---------------------------------------------------------------------------
 
 def generate_people(sites: pd.DataFrame, certs: pd.DataFrame,
-                    thin_types: list) -> tuple:
+                    thin_types: list[str]) -> tuple[pd.DataFrame, pd.DataFrame,
+                                                    pd.DataFrame, dict[str, int]]:
+    """Generate technicians, their certifications and training history.
+
+    Certification coverage is deliberately thin on two tool types and on
+    shift D. Returns (technicians, tech_certifications, trainings,
+    shift_counts).
+    """
     tech_rows = []
     shift_counts = {"A": 0, "B": 0, "C": 0, "D": 0}
     tech_id = 1
     for _, site in sites.iterrows():
         for _ in range(N_TECHS // len(sites)):
-            shift = random.choices(list(SHIFT_WEIGHTS), weights=list(SHIFT_WEIGHTS.values()), k=1)[0]
+            shift = random.choices(list(SHIFT_WEIGHTS),
+                                   weights=list(SHIFT_WEIGHTS.values()), k=1)[0]
             shift_counts[shift] += 1
             tech_rows.append({
                 "tech_id": tech_id,
@@ -345,7 +364,8 @@ def generate_people(sites: pd.DataFrame, certs: pd.DataFrame,
     weights = [0.12 if ct in thin_types else 1.0 for ct in cert_types]
     cert_ids = certs["cert_id"].tolist()
 
-    def weighted_sample(k):
+    def weighted_sample(k: int) -> list[int]:
+        """Pick k distinct cert ids without replacement, weighted by type."""
         pool = list(cert_ids)
         w = list(weights)
         picked = []
@@ -444,7 +464,8 @@ RESTART IDENTITY CASCADE
 """
 
 
-def load(engine, **frames):
+def load(engine: Engine, **frames: pd.DataFrame) -> None:
+    """Truncate the transactional tables and bulk-load the given frames."""
     with engine.begin() as conn:
         conn.execute(text(TRUNCATE_SQL))
         for table, df in frames.items():
@@ -461,7 +482,8 @@ def load(engine, **frames):
                 f"COALESCE(MAX({col}), 1)) FROM {table}"))
 
 
-def print_row_counts(engine):
+def print_row_counts(engine: Engine) -> None:
+    """Print the number of rows in every table."""
     tables = ["sites", "tools", "parts", "tool_bom", "inventory",
               "stock_movements", "technicians", "certifications",
               "tech_certifications", "training_completions"]
@@ -472,7 +494,8 @@ def print_row_counts(engine):
             print(f"  {table:>22}: {n}")
 
 
-def main():
+def main() -> None:
+    """Generate and load the full synthetic dataset (entry point)."""
     engine = connect()
     sites = pd.read_sql("SELECT site_id, site_code, site_name FROM sites", engine)
     parts = pd.read_sql("SELECT part_id, part_number, lead_time_days, is_consumable "

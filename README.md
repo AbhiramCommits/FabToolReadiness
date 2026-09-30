@@ -62,9 +62,7 @@ flowchart LR
 ```sh
 cp .env.example .env           # set a real password
 make reset                     # db up -> schema -> lookups -> synthetic data
-make analytics                 # create the analytics views (sql/analytics/)
-make export                    # Tableau CSVs + Excel tracker -> exports/
-make check                     # post-load data quality checks
+make all                       # refresh views -> quality checks -> exports -> findings
 ```
 
 | Target | What it does |
@@ -75,13 +73,35 @@ make check                     # post-load data quality checks
 | `make analytics` | (re)create the 6 analytics views, `00_as_of.sql` first |
 | `make refresh` | refresh the materialized views in dependency order |
 | `make export` | write `exports/tableau/*.csv` + `exports/FabToolReadiness_Tracker.xlsx` |
+| `make all` | `scripts/refresh_all.py`: refresh -> data quality -> export -> regenerate FINDINGS.md |
 | `make check` | `scripts/data_quality.py`: FK orphan scan + invariant checks |
 | `make test` | run the pytest suite against a throwaway schema |
+| `make lint` | run ruff over `scripts/` and `tests/` |
 
 `python scripts/export_reports.py --site ALL --as-of YYYY-MM-DD --out exports/`
 supports point-in-time snapshots: the materialized views are refreshed with
 `fabtool.as_of` set inside a rolled-back transaction, so the database is
 never left in a historical state.
+
+## Results
+
+Three headline findings from the seeded dataset (full readout:
+[docs/FINDINGS.md](docs/FINDINGS.md)):
+
+- **120 of 250 tools (48%)** are flagged critical or at-risk for downtime
+  readiness — 19 critical, 101 at-risk.
+- **Spare parts are the dominant driver**: 72 of 480 part/site bins are at
+  zero stock, exposing 208 tools (83%), while ~$211k sits in excess/obsolete
+  stock.
+- **Training coverage is patchy**: only ~68% of tool-type/site/shift cells
+  meet the 2-certified-tech target; shift D is thinnest, and CMP/AMHS tool
+  families average the lowest coverage ratios.
+
+Build and publish the dashboard with
+[docs/TABLEAU_GUIDE.md](docs/TABLEAU_GUIDE.md).
+
+**Tableau Public dashboard:**
+<!-- TODO: paste published URL -->
 
 ## Testing & validation
 

@@ -17,8 +17,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "scripts"))
 
 import export_reports  # noqa: E402
-
-from conftest import SCHEMA, AS_OF  # noqa: E402
+from conftest import AS_OF, SCHEMA  # noqa: E402
 
 CSV_COLUMNS = {
     "tool_readiness": ["snapshot_date", "site_code", "tool_id", "tool_code",

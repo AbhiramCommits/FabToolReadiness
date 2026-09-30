@@ -15,10 +15,11 @@ import os
 import sys
 from pathlib import Path
 
-from sqlalchemy import create_engine, text
+from sqlalchemy import Engine, create_engine, text
 
 
-def _read_env_file() -> dict:
+def _read_env_file() -> dict[str, str]:
+    """Read KEY=VALUE pairs from the repo .env file (no python-dotenv dep)."""
     env = {}
     path = Path(__file__).resolve().parent.parent / ".env"
     if path.exists():
@@ -31,7 +32,8 @@ def _read_env_file() -> dict:
     return env
 
 
-def connect():
+def connect() -> Engine:
+    """Build an engine for the fabtool database (env vars, .env fallback)."""
     file_env = _read_env_file()
 
     def val(key, default):
@@ -84,7 +86,8 @@ FIXED_CHECKS = [
 ]
 
 
-def main():
+def main() -> None:
+    """Run every check, print the pass/fail table, exit non-zero on failure."""
     engine = connect()
     checks = []
 
