@@ -19,6 +19,7 @@ Usage:
 import argparse
 import datetime as dt
 import logging
+import os
 import re
 import sys
 from pathlib import Path
@@ -56,12 +57,21 @@ def load_env() -> dict:
 
 def connect():
     env = load_env()
-    url = (f"postgresql+psycopg2://{env.get('FABTOOL_DB_USER', 'fabtool')}"
-           f":{env.get('POSTGRES_PASSWORD', '')}"
-           f"@{env.get('FABTOOL_DB_HOST', 'localhost')}"
-           f":{env.get('FABTOOL_DB_PORT', '5433')}"
-           f"/{env.get('FABTOOL_DB_NAME', 'fabtool')}")
-    return create_engine(url)
+
+    def val(key, default):
+        return os.environ.get(key) or env.get(key) or default
+
+    url = (f"postgresql+psycopg2://{val('FABTOOL_DB_USER', 'fabtool')}"
+           f":{val('POSTGRES_PASSWORD', '')}"
+           f"@{val('FABTOOL_DB_HOST', 'localhost')}"
+           f":{val('FABTOOL_DB_PORT', '5433')}"
+           f"/{val('FABTOOL_DB_NAME', 'fabtool')}")
+    connect_args = {}
+    schema = val("FABTOOL_DB_SCHEMA", "")
+    if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", schema):
+        # no ",public" fallback: keep unqualified DDL/DML scoped to the schema
+        connect_args["options"] = f"-c search_path={schema}"
+    return create_engine(url, connect_args=connect_args)
 
 
 # ---------------------------------------------------------------------------

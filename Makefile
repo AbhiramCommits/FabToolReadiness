@@ -2,7 +2,7 @@ PYTHON ?= python3.11
 ANALYTICS_FILES := 00_as_of 10_parts_consumption 11_inventory_health 12_tool_parts_risk \
 	13_training_coverage 14_training_throughput 15_tool_readiness
 
-.PHONY: up down schema seed reset venv psql analytics refresh export
+.PHONY: up down schema seed reset venv psql analytics refresh export test check
 
 up:
 	docker compose up -d --wait db
@@ -36,6 +36,12 @@ refresh:
 
 export: analytics venv
 	.venv/bin/python scripts/export_reports.py --site ALL --out exports
+
+test: venv
+	@if [ -x .venv/bin/python ]; then .venv/bin/python -m pytest tests/ -v; else python -m pytest tests/ -v; fi
+
+check:
+	@if [ -x .venv/bin/python ]; then .venv/bin/python scripts/data_quality.py; else python scripts/data_quality.py; fi
 
 psql:
 	docker compose exec db psql -U fabtool -d fabtool
